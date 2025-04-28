@@ -1,0 +1,241 @@
+---
+title: "Wellcome Global Monitor 2018"
+subtitle: "Measuring Knowledge of Science"
+format: 
+  dashboard: 
+    orientation: columns
+    nav-buttons: [github, linkedin]
+    github: https://github.com/nasoares/lab-3
+    linkedin: https://www.linkedin.com/in/nicholas-soares-795a23290/
+    theme: sandstone
+logo: images/wellcome_logo.png
+server: shiny
+editor: visual
+---
+
+```{r}
+#| context: setup
+#| label: load-packages
+#| message: false
+library(tidyverse)
+library(shiny)
+library(gt)
+library(gtExtras)
+library(readxl)
+library(RColorBrewer)
+library(leaflet)
+library(sf)
+library(viridisLite)
+library(scales)
+library(fontawesome)
+```
+
+```{r}
+#| context: data
+#| label: prep-data
+#| message: false
+#| warning: false
+
+#Loading pre-cleaned data
+wgm_sf<-read_sf("data/wgm_sf.shp")
+wgm_sci_age<-readRDS("data/wgm_sci_age.RDS")
+country_rank<-readRDS("data/country_rank.RDS")
+```
+
+# Results by Country
+
+## Column - Leaflet Map {width="70%"}
+
+```{r}
+#| label: leaflet-map
+#| title: "Perceived Knowledge About Science By Country"
+#| message: false
+#| warning: false
+
+#Creating a color palette to display data
+mypalette<-colorNumeric(
+  palette="viridis",domain=wgm_sf$KnowLevel,
+  na.color="transparent"
+)
+
+#Text labels
+mytext<-paste(
+  "Country: ",wgm_sf$NAME,"<br/>",
+  "Knowledge Level: ",round(wgm_sf$KnowLevel,0),"%","</br>",
+  sep=""
+)%>%
+  lapply(htmltools::HTML)
+
+#Display map
+leaflet(wgm_sf)%>%
+  addTiles()%>%
+  setView(lat=0,lng=0,zoom=2)%>%
+  addPolygons(fillColor = ~mypalette(KnowLevel),stroke = F,
+              label=mytext,fillOpacity = 0.9)%>%
+  addLegend(pal = mypalette,values=~KnowLevel,
+            title="Self-Reported </br> Knowledge Level (%)",position = "bottomleft",
+            opacity=0.9,labFormat = labelFormat(suffix = "%"))
+```
+
+## Column - Data Cards {width="30%"}
+
+###  {.sidebar height="20%"}
+
+```{r}
+#| label: rankings
+
+sliderInput('rank','Select Rank',
+            min = 1,max = nrow(country_rank),
+            value = nrow(country_rank)/2,
+            step = 1, round = 0) 
+```
+
+```{r}
+#| label: quick-stats
+
+knowlevel_high<-wgm_sf|>
+  select(NAME,KnowLevel)|>
+  slice_max(order_by = KnowLevel)
+
+knowlevel_low<-wgm_sf|>
+  select(NAME,KnowLevel)|>
+  slice_min(order_by = KnowLevel)
+```
+
+### Reactive Card {height="40%"}
+
+::: {.valuebox icon="globe-americas" color="#FDE725"}
+`{r} textOutput('percent')`
+
+`{r} textOutput('country')`
+:::
+
+### Summary Card {height="40%"}
+
+::: {.valuebox icon="globe2" color="#5DC863"}
+`{r} paste(round(mean(wgm_sf$KnowLevel),1),"%")`
+
+Average of Surveyed Countries
+:::
+
+# Results by Region and Age
+
+```{r}
+#| content: card-toolbar
+
+selectInput('variable','Select Variable',c("AgeRange","Region"))
+```
+
+## Column - animated plot {width="60%"}
+
+```{r}
+#| label: animate-map
+#| title: "Perceived Knowledge About Science By Region or Age Group"
+#| message: false
+#| warning: false
+
+plotOutput('plot')
+
+```
+
+## Overview
+
+### Summary
+
+All data displayed on this dashboard comes from Chapter 2 of the [2018 Wellcome Global Monitor Report](https://cms.wellcome.org/sites/default/files/wellcome-global-monitor-2018.pdf), entitled "Understanding and interest in science and health".
+
+The primary metric used in this chapter of the report is "Knowledge Level", defined as the percentage of people who answered 'a lot' or 'some' in response to the question: *How much do you know about science? Do you know a lot, some, not much, or nothing at all?*
+
+### Tabset {.tabset width="40%"}
+
+::: {.card title="Age Summary"}
+Age ranges sorted in descending order of knowledge level (%). In general, a higher percentage of 15-29 year olds across all regions self-report having 'a lot' or 'some' scientific knowledge compared to the older age groups.
+
+```{r}
+#| label: age-table
+
+age_table<-wgm_sci_age|>
+  group_by(AgeRange)|>
+  summarize(Prop=mean(Prop))|>
+  arrange(desc(Prop))|>
+  mutate(Percentage=paste(round(Prop,2)*100,"%",sep=""))|>
+  select(AgeRange,Percentage)|>
+  gt()|>  
+  cols_align(align="left",
+             columns = c("AgeRange","Percentage"))|>
+  gt_theme_guardian()
+age_table
+```
+:::
+
+::: {.card title="Region Summary"}
+Regions sorted in descending order of knowledge level (%). The list of countries belonging to each region have been defined on page
+
+```{r}
+#| label: region-table
+
+region_table<-wgm_sci_age|>
+  group_by(Region)|>
+  summarize(Prop=mean(Prop))|>
+  arrange(desc(Prop))|>
+  mutate(Percentage=paste(round(Prop,2)*100,"%",sep=""))|>
+  select(Region,Percentage)|>
+  gt()|>
+  cols_align(align="left",
+             columns = c("Region","Percentage"))|>
+  gt_theme_guardian()
+region_table
+```
+:::
+
+```{r}
+#| context: server
+#| message: false
+#| warning: false
+
+#Dataset for Age and Range plot
+
+dataset<-reactive({
+  plot_data<-wgm_sci_age[,c("Prop",input$variable)]
+  colnames(plot_data)<-c("Prop","Yvar")
+  plot_data<-plot_data|>
+    group_by(Yvar)|>
+    summarize(Prop=mean(Prop))
+})
+
+#Reactive plot
+
+output$plot <- renderPlot({
+  p<-ggplot(dataset(),aes(x=Prop,y=Yvar,fill=Prop),color="black")+
+  geom_bar(stat="identity")+
+  scale_fill_viridis_c(labels = scales::percent_format(accuracy = 1))+
+  scale_y_discrete(limits=rev)+
+  scale_x_continuous(labels = scales::percent_format(accuracy = 1))+
+  labs(x=NULL,y=NULL,title=NULL,fill="Percent")+
+  theme_minimal()+
+  theme(panel.grid.minor.x = element_blank(),
+        panel.grid.major.y = element_blank(),
+        text = element_text(size=20),
+        panel.background = element_rect(fill = "#faf9f6",color = "#faf9f6"),
+        plot.background = element_rect(fill="#faf9f6",color="#faf9f6"),
+        panel.grid.major.x = element_line(linetype = "dashed",colour = "grey"))
+  p
+})
+
+#Dataset for Country value box: https://stackoverflow.com/questions/78358765/how-to-show-a-value-calculated-with-shiny-server-in-a-quarto-dashboard-valuebo
+
+rank<-reactive({
+  n_row<-country_rank[input$rank,]
+})
+
+output$country<-renderText({
+  t1<-paste(rank()[1,1])
+  t1
+})
+
+output$percent<-renderText({
+  t2<-paste(rank()[1,3])
+  t2
+})
+
+```
