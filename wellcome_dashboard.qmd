@@ -206,15 +206,16 @@ dataset<-reactive({
 #Reactive plot
 
 output$plot <- renderPlot({
-  p<-ggplot(dataset(),aes(x=Prop,y=Yvar,fill=Prop),color="black")+
+  p<-ggplot(dataset(),aes(x=Prop,y=fct_reorder(Yvar,Prop,.desc=T),fill=Prop),color="black")+
   geom_bar(stat="identity")+
   scale_fill_viridis_c(labels = scales::percent_format(accuracy = 1))+
   scale_y_discrete(limits=rev)+
   scale_x_continuous(labels = scales::percent_format(accuracy = 1))+
-  labs(x=NULL,y=NULL,title=NULL,fill="Percent")+
+  labs(x=NULL,y=NULL,title=NULL)+
   theme_minimal()+
   theme(panel.grid.minor.x = element_blank(),
         panel.grid.major.y = element_blank(),
+        legend.position="none",
         text = element_text(size=20),
         panel.background = element_rect(fill = "#faf9f6",color = "#faf9f6"),
         plot.background = element_rect(fill="#faf9f6",color="#faf9f6"),

@@ -1,0 +1,10 @@
+name: lab-4
+title:
+username: nasoares
+account: nasoares
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 14635234
+bundleId: 10194444
+url: https://nasoares.shinyapps.io/lab-4/
+version: 1
